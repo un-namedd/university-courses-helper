@@ -1,0 +1,109 @@
+@import 'tailwindcss';
+
+/* Class-based dark mode: toggled by `.dark` on <html>. Light is the default. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Semantic design tokens. Utilities reference these by name (via @theme inline),
+   so flipping the values under `.dark` retints the whole UI at runtime. */
+:root {
+  --bg: #f6f1e9;
+  --surface: #fffdf9;
+  --surface-2: #efe7d9;
+  --elevated: #e9dfcd;
+  --line: #e2d7c4;
+  --line-strong: #d4c6ad;
+  --fg: #2a2520;
+  --muted: #756a58;
+  --faint: #9a8e79;
+
+  --accent: #ea580c;
+  --accent-strong: #c2410c;
+  --accent-soft: rgba(234, 88, 12, 0.12);
+  --accent-fg: #ffffff;
+  --ring: rgba(234, 88, 12, 0.45);
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #16130e;
+  --surface: #201c15;
+  --surface-2: #29241b;
+  --elevated: #332d22;
+  --line: #3b3327;
+  --line-strong: #4b4234;
+  --fg: #ece5d8;
+  --muted: #a89c87;
+  --faint: #7d7261;
+
+  --accent: #f59e0b;
+  --accent-strong: #fbbf24;
+  --accent-soft: rgba(245, 158, 11, 0.14);
+  --accent-fg: #1a140a;
+  --ring: rgba(245, 158, 11, 0.5);
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-elevated: var(--elevated);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+
+  --font-sans: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle, theme-aware scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/* Shared surface card with generous rounding + soft depth. */
+.panel {
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-2xl);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 8px 24px -16px rgba(0, 0, 0, 0.18);
+}
