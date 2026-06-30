@@ -14,13 +14,15 @@ export function AddCourseButton({ termId }: { termId: string }) {
 
   const results = useMemo(() => {
     const codes = allCodes()
-    const q = query.trim().toLowerCase()
-    if (!q) return codes.slice(0, 8)
+    const raw = query.trim().toLowerCase()
+    if (!raw) return codes.slice(0, 8)
+    // Match codes ignoring the "*" and spaces, so "stat 2040" finds "STAT*2040".
+    const compact = raw.replace(/[^a-z0-9]/g, '')
     return codes
       .filter(
         (c) =>
-          c.toLowerCase().includes(q) ||
-          titleFor(c).toLowerCase().includes(q),
+          c.toLowerCase().replace(/[^a-z0-9]/g, '').includes(compact) ||
+          titleFor(c).toLowerCase().includes(raw),
       )
       .slice(0, 12)
   }, [query])
