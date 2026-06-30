@@ -37,7 +37,12 @@ export async function signInWithGoogle(): Promise<void> {
   if (!supabase) throw new Error('Cloud sync is not configured.')
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.origin },
+    options: {
+      redirectTo: window.location.origin,
+      // Request only email — no Drive, Calendar, contacts, etc.
+      scopes: 'email',
+      queryParams: { prompt: 'consent' },
+    },
   })
   if (error) throw error
 }

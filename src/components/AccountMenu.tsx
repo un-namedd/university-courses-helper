@@ -97,6 +97,12 @@ export function AccountMenu() {
                   >
                     Continue with Google
                   </button>
+                  <p className="text-[11px] leading-relaxed text-faint">
+                    Sign-in uses your <strong className="font-medium text-muted">email</strong> only
+                    to identify your account. We store degree plans you save (program, terms,
+                    courses) in Supabase. Shared links are public only if you turn sharing on.
+                    Google does not get access to your plans.
+                  </p>
                 </>
               )}
               {error && <p className="text-xs text-rose-500">{error}</p>}
