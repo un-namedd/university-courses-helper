@@ -18,6 +18,7 @@ import { Header } from './components/Header'
 import { RequirementsPanel } from './components/RequirementsPanel'
 import { Planner } from './components/Planner'
 import { CourseDialog } from './components/CourseDialog'
+import { LegalFooterLinks } from './components/legal/LegalFooterLinks'
 import { colorForIndex, shortLabel } from './components/bucketMeta'
 
 export interface GroupMeta {
@@ -224,6 +225,10 @@ export default function App() {
       </DndContext>
 
       <CourseDialog />
+
+      <footer className="border-t border-line py-6">
+        <LegalFooterLinks />
+      </footer>
     </div>
   )
 }

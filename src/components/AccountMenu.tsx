@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { signInWithEmail, signInWithGoogle, signOut, useAuth } from '../lib/auth'
 import { CloudPlans } from './CloudPlans'
@@ -101,7 +102,10 @@ export function AccountMenu() {
                     Sign-in uses your <strong className="font-medium text-muted">email</strong> only
                     to identify your account. We store degree plans you save (program, terms,
                     courses) in Supabase. Shared links are public only if you turn sharing on.
-                    Google does not get access to your plans.
+                    Google does not get access to your plans.{' '}
+                    <Link to="/privacy" className="text-accent underline">
+                      Privacy Policy
+                    </Link>
                   </p>
                 </>
               )}

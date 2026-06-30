@@ -7,6 +7,7 @@ import { creditsFor, getProgram, setActiveProgram, titleFor } from '../lib/progr
 import { allocate } from '../lib/allocate'
 import { round } from '../lib/format'
 import { ProgressBar } from '../components/ProgressBar'
+import { LegalFooterLinks } from '../components/legal/LegalFooterLinks'
 import { colorForIndex, EXTRA_COLOR, shortLabel } from '../components/bucketMeta'
 
 type Status = 'loading' | 'ready' | 'notfound' | 'error'
@@ -190,6 +191,10 @@ export function SharedPlanView() {
           })}
         </section>
       </main>
+
+      <footer className="border-t border-line py-6">
+        <LegalFooterLinks />
+      </footer>
     </div>
   )
 }
