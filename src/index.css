@@ -73,8 +73,24 @@ body,
   height: 100%;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  :where(
+    .overflow-y-auto,
+    .overflow-x-auto,
+    .overflow-auto,
+    .overflow-scroll
+  ) {
+    scroll-behavior: smooth;
+  }
+}
+
 body {
   margin: 0;
+  overflow-x: hidden;
   background-color: var(--bg);
   color: var(--fg);
   font-family: var(--font-sans);

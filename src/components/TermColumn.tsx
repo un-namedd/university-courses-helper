@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import type { BucketId, PlacedCourse, ProgramTerm, Season } from '../types'
@@ -7,6 +8,7 @@ import { creditsFor } from '../lib/program'
 import { round } from '../lib/format'
 import { usePlan } from '../store'
 import { CourseCard } from './CourseCard'
+import { COURSE_PIN_EXPAND_PX } from './courseCardExpand'
 import { AddCourseButton } from './AddCourseButton'
 import { CalendarIcon, TrashIcon } from './icons'
 
@@ -33,6 +35,12 @@ export function TermColumn({
   const setTermSeason = usePlan((s) => s.setTermSeason)
   const removeTerm = usePlan((s) => s.removeTerm)
 
+  const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null)
+  const expandedIndex =
+    expandedCourseId !== null
+      ? courses.findIndex((c) => c.id === expandedCourseId)
+      : -1
+
   const { setNodeRef, isOver } = useDroppable({
     id: `term:${term.id}`,
     data: { type: 'term', termId: term.id },
@@ -46,11 +54,11 @@ export function TermColumn({
   return (
     <div
       className={
-        'panel flex flex-col p-4 transition ' +
+        'panel flex h-full min-h-0 flex-col p-3 sm:p-4 ' +
         (isOver ? 'ring-2 ring-accent/60' : '')
       }
     >
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex shrink-0 items-center gap-2">
         <CalendarIcon className="h-4 w-4 shrink-0 text-accent" />
         <input
           value={term.label}
@@ -77,37 +85,66 @@ export function TermColumn({
         </button>
       </div>
 
-      <div ref={setNodeRef} className="flex min-h-[48px] flex-1 flex-col gap-2.5 pb-8">
-        <SortableContext
-          items={courses.map((c) => c.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          {courses.map((c) => (
-            <CourseCard
-              key={c.id}
-              pc={c}
-              bucket={byCourse[c.id] ?? 'extra'}
-              warnings={warnings[c.id] ?? []}
-              groupMeta={groupMeta}
-              pinOptions={pinOptions}
-            />
-          ))}
-        </SortableContext>
+      <div
+        ref={setNodeRef}
+        className="flex min-h-[48px] flex-1 flex-col"
+      >
+        <div className="flex flex-col gap-2.5">
+          <SortableContext
+            items={courses.map((c) => c.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {courses.map((c, i) => {
+              const shiftDown = expandedIndex >= 0 && i > expandedIndex
+              return (
+                <div
+                  key={c.id}
+                  style={{
+                    transform: shiftDown
+                      ? `translateY(${COURSE_PIN_EXPAND_PX}px)`
+                      : undefined,
+                  }}
+                >
+                  <CourseCard
+                    pc={c}
+                    bucket={byCourse[c.id] ?? 'extra'}
+                    warnings={warnings[c.id] ?? []}
+                    groupMeta={groupMeta}
+                    pinOptions={pinOptions}
+                    onPinHoverChange={(open) =>
+                      setExpandedCourseId(open ? c.id : null)
+                    }
+                  />
+                </div>
+              )
+            })}
+          </SortableContext>
 
-        {courses.length === 0 && (
-          <p className="rounded-xl border border-dashed border-line py-4 text-center text-xs text-faint">
-            Drag courses here
-          </p>
+          {courses.length === 0 && (
+            <p className="rounded-xl border border-dashed border-line py-4 text-center text-xs text-faint">
+              Drag courses here
+            </p>
+          )}
+        </div>
+
+        {courses.length > 0 && (
+          <div
+            className="mt-auto shrink-0"
+            style={{ height: COURSE_PIN_EXPAND_PX }}
+            aria-hidden
+          />
         )}
       </div>
 
-      <div className="mt-3.5 flex items-center justify-between">
-        <span className="text-xs font-medium text-muted">
-          {round(planned)} planned cr
-        </span>
-      </div>
-      <div className="mt-2.5">
-        <AddCourseButton termId={term.id} />
+      <div className="shrink-0 pt-4">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-muted">
+            {round(planned)} planned cr
+          </span>
+        </div>
+        <div className="mt-2.5">
+          <AddCourseButton termId={term.id} />
+        </div>
       </div>
     </div>
   )

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { signInWithEmail, signInWithGoogle, signOut, useAuth } from '../lib/auth'
-import { CloudPlans } from './CloudPlans'
 
 export function AccountMenu() {
   const { user } = useAuth()
@@ -56,7 +55,6 @@ export function AccountMenu() {
                 </p>
                 <p className="truncate text-sm font-medium text-fg">{user.email}</p>
               </div>
-              <CloudPlans onDone={() => setOpen(false)} />
               <button
                 onClick={() => signOut()}
                 className="w-full rounded-lg border border-line py-2 text-sm font-medium text-fg transition hover:border-accent/60"

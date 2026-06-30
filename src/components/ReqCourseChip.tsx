@@ -24,7 +24,7 @@ export function ReqCourseChip({ code, context, taken }: Props) {
       {...attributes}
       title={titleFor(code)}
       className={
-        'flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition ' +
+        'flex items-center gap-2 rounded-xl border px-2.5 py-2 text-sm transition sm:px-3 sm:py-2.5 ' +
         (taken
           ? 'border-line/60 bg-surface-2/60 text-faint'
           : 'cursor-grab touch-none border-line bg-surface-2 text-fg hover:border-accent/60 active:cursor-grabbing') +

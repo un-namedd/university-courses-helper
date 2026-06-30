@@ -34,13 +34,15 @@ export function CreditTag({
   earned,
   required,
   accent = 'text-accent',
+  className = 'text-sm',
 }: {
   earned: number
   required: number
   accent?: string
+  className?: string
 }) {
   return (
-    <span className="shrink-0 text-sm font-semibold tabular-nums">
+    <span className={'shrink-0 font-semibold tabular-nums ' + className}>
       <span className={accent}>{round(earned)}</span>
       <span className="text-faint"> / {round(required)} cr</span>
     </span>

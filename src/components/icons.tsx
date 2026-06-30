@@ -123,3 +123,20 @@ export function WarnIcon({ className }: IconProps) {
     </svg>
   )
 }
+
+export function SaveIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden>
+      <path d="M4 3.5h9l3.5 3.5V16a1 1 0 01-1 1H5a1 1 0 01-1-1V4.5a1 1 0 011-1z" />
+      <path d="M7 3.5v4h6V3.5M7 16h6" />
+    </svg>
+  )
+}
+
+export function FolderIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden>
+      <path d="M3 6.5A1.5 1.5 0 014.5 5H8l1.5 2h6A1.5 1.5 0 0117 8.5v6A1.5 1.5 0 0115.5 16h-11A1.5 1.5 0 013 14.5v-8z" />
+    </svg>
+  )
+}

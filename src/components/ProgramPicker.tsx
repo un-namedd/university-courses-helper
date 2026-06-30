@@ -45,7 +45,7 @@ export function ProgramPicker() {
           setOpen((o) => !o)
           setTimeout(() => inputRef.current?.focus(), 0)
         }}
-        className="flex min-w-[230px] items-center gap-2 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-left text-sm text-fg outline-none transition hover:border-accent/60"
+        className="flex w-full min-w-0 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-left text-sm text-fg outline-none transition hover:border-accent/60 sm:min-w-[230px] sm:w-auto"
       >
         <span className="min-w-0 flex-1 truncate font-medium">
           {current ? current.name : 'Select a program…'}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { pauseSmoothScroll, resumeSmoothScroll } from './components/SmoothScroll'
 import {
   DndContext,
   DragOverlay,
@@ -90,6 +91,7 @@ export default function App() {
   )
 
   function onDragStart(event: DragStartEvent) {
+    pauseSmoothScroll()
     const data = event.active.data.current
     if (data?.type === 'req') setActiveLabel(data.code)
     else {
@@ -99,6 +101,7 @@ export default function App() {
   }
 
   function onDragEnd(event: DragEndEvent) {
+    resumeSmoothScroll()
     setActiveLabel(null)
     const { active, over } = event
     if (!over) return
@@ -184,17 +187,20 @@ export default function App() {
         collisionDetection={closestCorners}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        onDragCancel={() => setActiveLabel(null)}
+        onDragCancel={() => {
+          resumeSmoothScroll()
+          setActiveLabel(null)
+        }}
       >
         {isTop ? (
-          <main className="mx-auto max-w-[1500px] space-y-6 px-6 py-7">
+          <main className="mx-auto max-w-[1500px] space-y-6 px-4 py-5 sm:px-6 sm:py-7">
             <section>{requirements}</section>
             <section>{planner}</section>
           </main>
         ) : (
           <main
             className={
-              'mx-auto grid max-w-[1500px] grid-cols-1 gap-6 px-6 py-7 lg:gap-7 ' +
+              'mx-auto grid max-w-[1500px] grid-cols-1 gap-5 px-4 py-5 sm:gap-6 sm:px-6 sm:py-7 lg:gap-7 ' +
               (isRight
                 ? 'lg:grid-cols-[1fr_minmax(340px,400px)]'
                 : 'lg:grid-cols-[minmax(340px,400px)_1fr]')

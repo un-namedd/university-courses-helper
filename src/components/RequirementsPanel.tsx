@@ -23,7 +23,7 @@ export function RequirementsPanel({
 }: Props) {
   if (variant === 'top') {
     return (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {buckets.map((b, i) => {
           const meta = colorForIndex(i)
           return (
@@ -96,16 +96,17 @@ function BucketSection({
     <section className="panel overflow-hidden">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-5 pt-5"
+        className="flex w-full items-center gap-2 px-4 pt-4 sm:gap-3 sm:px-5 sm:pt-5"
       >
         <span className={'h-3 w-3 shrink-0 rounded-full ' + meta.bar} />
-        <h3 className="flex-1 text-left text-[15px] font-semibold text-fg">
+        <h3 className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-fg sm:text-[15px]">
           {bucket.name}
         </h3>
         <CreditTag
           earned={bucket.earnedCredits}
           required={bucket.requiredCredits}
           accent={meta.text}
+          className="text-xs sm:text-sm"
         />
         <ChevronIcon
           className={
@@ -115,7 +116,7 @@ function BucketSection({
         />
       </button>
 
-      <div className="px-5 pb-5 pt-3">
+      <div className="px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
         <ProgressBar
           earned={bucket.earnedCredits}
           required={bucket.requiredCredits}

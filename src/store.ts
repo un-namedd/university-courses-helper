@@ -36,6 +36,9 @@ export interface PlanState {
   layout: Layout
   openCourse: string | null
 
+  activeCloudPlanId: string | null
+  activeCloudPlanName: string | null
+
   /** Load the persisted program and seed a plan on first run. */
   initProgram: () => Promise<void>
   /** Switch to a different program (resets the plan to its recommended sequence). */
@@ -49,7 +52,10 @@ export interface PlanState {
     aoeId: string | null,
     terms: ProgramTerm[],
     placed: PlacedCourse[],
+    activeCloud?: { id: string; name: string } | null,
   ) => Promise<void>
+  clearActiveCloudPlan: () => void
+  setActiveCloudPlan: (id: string, name: string) => void
 
   setAoe: (id: string | null) => void
   setTheme: (theme: Theme) => void
@@ -88,6 +94,9 @@ export const usePlan = create<PlanState>()(
       layout: 'sidebar-left',
       openCourse: null,
 
+      activeCloudPlanId: null,
+      activeCloudPlanName: null,
+
       initProgram: async () => {
         const program = await loadProgram(get().programId)
         setActiveProgram(program)
@@ -109,6 +118,8 @@ export const usePlan = create<PlanState>()(
           aoeId: program.areasOfEmphasis[0]?.id ?? null,
           terms: cloneTerms(program.defaultTerms),
           placed: [],
+          activeCloudPlanId: null,
+          activeCloudPlanName: null,
         })
       },
 
@@ -122,11 +133,24 @@ export const usePlan = create<PlanState>()(
         }
       },
 
-      applyCloudPlan: async (programId, aoeId, terms, placed) => {
+      applyCloudPlan: async (programId, aoeId, terms, placed, activeCloud) => {
         const program = await loadProgram(programId)
         setActiveProgram(program)
-        set({ programId, aoeId, terms: cloneTerms(terms), placed: [...placed] })
+        set({
+          programId,
+          aoeId,
+          terms: cloneTerms(terms),
+          placed: [...placed],
+          activeCloudPlanId: activeCloud?.id ?? null,
+          activeCloudPlanName: activeCloud?.name ?? null,
+        })
       },
+
+      clearActiveCloudPlan: () =>
+        set({ activeCloudPlanId: null, activeCloudPlanName: null }),
+
+      setActiveCloudPlan: (id, name) =>
+        set({ activeCloudPlanId: id, activeCloudPlanName: name }),
 
       setAoe: (id) => set({ aoeId: id }),
       setTheme: (theme) => set({ theme }),
@@ -209,8 +233,13 @@ export const usePlan = create<PlanState>()(
 
       resetEmpty: () => {
         const program = getProgram()
-        if (!program) return set({ placed: [] })
-        set({ terms: cloneTerms(program.defaultTerms), placed: [] })
+        if (!program) return set({ placed: [], activeCloudPlanId: null, activeCloudPlanName: null })
+        set({
+          terms: cloneTerms(program.defaultTerms),
+          placed: [],
+          activeCloudPlanId: null,
+          activeCloudPlanName: null,
+        })
       },
 
       resetRecommended: () => {
@@ -219,6 +248,8 @@ export const usePlan = create<PlanState>()(
         set({
           terms: cloneTerms(program.defaultTerms),
           placed: seededPlaced(program),
+          activeCloudPlanId: null,
+          activeCloudPlanName: null,
         })
       },
     }),
@@ -231,6 +262,8 @@ export const usePlan = create<PlanState>()(
         placed: s.placed,
         theme: s.theme,
         layout: s.layout,
+        activeCloudPlanId: s.activeCloudPlanId,
+        activeCloudPlanName: s.activeCloudPlanName,
       }),
     },
   ),

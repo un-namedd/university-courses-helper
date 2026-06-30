@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import { CookieConsentBanner } from './components/legal/CookieConsentBanner.tsx'
+import { SmoothScroll } from './components/SmoothScroll.tsx'
 import { LegalPage } from './pages/LegalPage.tsx'
 import { SharedPlanView } from './pages/SharedPlanView.tsx'
 
@@ -19,6 +20,7 @@ try {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
+      <SmoothScroll />
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/p/:shareId" element={<SharedPlanView />} />
