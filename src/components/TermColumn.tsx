@@ -77,7 +77,7 @@ export function TermColumn({
         </button>
       </div>
 
-      <div ref={setNodeRef} className="flex min-h-[48px] flex-1 flex-col gap-2.5">
+      <div ref={setNodeRef} className="flex min-h-[48px] flex-1 flex-col gap-2.5 pb-8">
         <SortableContext
           items={courses.map((c) => c.id)}
           strategy={verticalListSortingStrategy}

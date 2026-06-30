@@ -101,7 +101,7 @@ export function CourseCard({ pc, bucket, warnings, groupMeta, pinOptions }: Prop
         </ul>
       )}
 
-      <div className="mt-2 hidden items-center gap-1.5 group-hover:flex">
+      <div className="mt-2 flex items-center gap-1.5 invisible group-hover:visible">
         <span className="text-[10px] uppercase tracking-wider text-faint">
           count as
         </span>
