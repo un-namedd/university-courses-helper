@@ -91,11 +91,12 @@ export const usePlan = create<PlanState>()(
       initProgram: async () => {
         const program = await loadProgram(get().programId)
         setActiveProgram(program)
-        // Seed only on a fresh plan; keep a returning user's saved layout/courses.
+        // Start empty; keep a returning user's saved layout/courses. The
+        // "Recommended" button can optionally fill the program's sequence.
         if (get().terms.length === 0) {
           set({
             terms: cloneTerms(program.defaultTerms),
-            placed: seededPlaced(program),
+            placed: [],
           })
         }
       },
@@ -107,7 +108,7 @@ export const usePlan = create<PlanState>()(
           programId: id,
           aoeId: program.areasOfEmphasis[0]?.id ?? null,
           terms: cloneTerms(program.defaultTerms),
-          placed: seededPlaced(program),
+          placed: [],
         })
       },
 

@@ -88,8 +88,9 @@ function BucketSection({
     .map((id) => placedById.get(id)?.code)
     .filter((c): c is string => Boolean(c))
 
-  const isElectiveBucket =
-    bucket.id === 'cisElective' || bucket.id === 'freeElective'
+  // Match-based groups (subject/level electives, free electives) have no fixed
+  // course list, so show the courses currently counted toward them instead.
+  const hasMatch = Boolean(bucket.match)
 
   return (
     <section className="panel overflow-hidden">
@@ -142,11 +143,9 @@ function BucketSection({
               <div key={gi} className="rounded-xl border border-line bg-surface-2 p-3">
                 <div className="mb-2.5 flex items-center justify-between">
                   <span className="text-xs font-semibold text-fg">
-                    {group.label}
+                    {round(group.credits)} credits from:
                   </span>
-                  <span className="text-[11px] text-faint">
-                    choose {round(group.credits)} cr
-                  </span>
+                  <span className="text-[11px] text-faint">{group.label}</span>
                 </div>
                 <div className="grid grid-cols-1 gap-2">
                   {group.options.map((code) => (
@@ -161,7 +160,7 @@ function BucketSection({
               </div>
             ))}
 
-            {isElectiveBucket && (
+            {hasMatch && (
               <div>
                 {countingCodes.length > 0 ? (
                   <div className="flex flex-wrap gap-2">

@@ -12,7 +12,7 @@
 
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { mkdir, writeFile, readFile } from 'node:fs/promises'
+import { mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises'
 import { CALENDAR, download, pdfToLines, tryDownload } from './lib/pdf.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -59,23 +59,64 @@ function slugToName(slug) {
 
 // ----------------------------------------------------------------------------
 // Generic program parsing
+//
+// Programs come in two layouts:
+//  - Schedule layout (B.Comm, many B.Sc): "Semester N" tables with course rows
+//    and "Select X credits from the following:" choose-lists.
+//  - Major-requirements layout (most B.A./B.Sc majors): no semesters, just
+//    "Code Title Credits" tables + "Select X from" groups + rule lines like
+//    "1.00 credits from ENGL 4000 level courses".
+// We parse both into the same generic RequirementGroup model and emit a separate
+// "<slug>-coop" variant whenever a co-op stream (COOP* courses) is detected.
 // ----------------------------------------------------------------------------
 
-function courseCreditsFromLine(line, code) {
-  const m = line.match(CREDIT_END)
+const COOP_SCAFFOLD = [
+  { id: 'y1f', label: 'Year 1 Fall', season: 'Fall' },
+  { id: 'y1w', label: 'Year 1 Winter', season: 'Winter' },
+  { id: 'y2f', label: 'Year 2 Fall', season: 'Fall' },
+  { id: 'y2w', label: 'Year 2 Winter', season: 'Winter' },
+  { id: 'y2s', label: 'Year 2 Summer', season: 'Summer' },
+  { id: 'y3f', label: 'Year 3 Fall', season: 'Fall' },
+  { id: 'y3w', label: 'Year 3 Winter', season: 'Winter' },
+  { id: 'y3s', label: 'Year 3 Summer', season: 'Summer' },
+  { id: 'y4f', label: 'Year 4 Fall', season: 'Fall' },
+  { id: 'y4w', label: 'Year 4 Winter', season: 'Winter' },
+  { id: 'y4s', label: 'Year 4 Summer', season: 'Summer' },
+  { id: 'y5f', label: 'Year 5 Fall', season: 'Fall' },
+  { id: 'y5w', label: 'Year 5 Winter', season: 'Winter' },
+]
+
+const semScaffold = (n) =>
+  Array.from({ length: n }, (_, i) => ({
+    id: `s${i + 1}`,
+    label: `Semester ${i + 1}`,
+    season: (i + 1) % 2 === 1 ? 'Fall' : 'Winter',
+  }))
+
+/** A "Select X credits from the following:" choose-list header -> credits, or null. */
+function selectHeader(line) {
+  let m = line.match(/(?:Select\s+)?(\d+\.\d{2})\s+credits?\s+from\s+the following/i)
   if (m) return parseFloat(m[1])
-  return creditsFor(code)
+  m = line.match(/^Select\s+(\d+\.\d{2})\s+credits?\s+from\b/i)
+  if (m) return parseFloat(m[1])
+  return null
 }
 
-/** Classify an elective rule line into a {subject?, minLevel, maxLevel?, credits}. */
-function parseElectiveRule(line) {
+/** Classify a rule line into {subject?, minLevel?, maxLevel?, credits}, or null. */
+function parseRuleLine(line) {
+  // "A maximum ... may be counted" is a cap, not a requirement.
+  if (/^A maximum/i.test(line)) return null
+  if (selectHeader(line) != null) return null
   const credM = line.match(/(\d+\.\d{2})/)
   if (!credM) return null
   const credits = parseFloat(credM[1])
   const orAbove = /or above/i.test(line)
 
-  let m = line.match(/\bin\s+([A-Z]{2,5})\b.*?at the\s+(\d)000 level/i)
-  if (!m) m = line.match(/\b([A-Z]{2,5})\s+electives?\b.*?at the\s+(\d)000 level/i)
+  // subject + level (several phrasings)
+  let m =
+    line.match(/\bin\s+([A-Z]{2,5})\b.*?at the\s+(\d)000[\s-]*level/i) ||
+    line.match(/\b([A-Z]{2,5})\s+electives?\b.*?at the\s+(\d)000[\s-]*level/i) ||
+    line.match(/\bfrom\s+([A-Z]{2,5})\b[^.]*?(\d)000[\s-]*level/i)
   if (m) {
     const level = parseInt(m[2], 10) * 1000
     return {
@@ -85,12 +126,24 @@ function parseElectiveRule(line) {
       credits,
     }
   }
-  m = line.match(/at the\s+(\d)000 level/i)
+  // "X credits from any other SUBJ ... courses" (subject, any level)
+  m = line.match(/from\s+any other\s+([A-Z]{2,5})/i)
+  if (m) return { subject: m[1], credits }
+  // level only
+  m = line.match(/at the\s+(\d)000[\s-]*level/i)
   if (m) {
     const level = parseInt(m[1], 10) * 1000
     return { minLevel: level, maxLevel: orAbove ? undefined : level + 999, credits }
   }
   return null
+}
+
+/** A heading that introduces a reference menu of acceptable elective courses
+ *  (not required core), e.g. "History Electives Lists". */
+function isMenuHeading(line) {
+  return /Electives Lists\b|acceptable courses below|list of acceptable courses/i.test(
+    line,
+  )
 }
 
 function isTitleLike(line) {
@@ -100,12 +153,12 @@ function isTitleLike(line) {
     !/[.:]$/.test(line) &&
     !COURSE_ROW.test(line) &&
     !/^\d/.test(line) &&
-    !/^(Code Title Credits|Select|Semester|Year|Credit Summary)/i.test(line)
+    !/\d\.\d/.test(line) &&
+    !/^(Code Title Credits|Select|Semester|Year|Total Credits|Credit Summary|Recommended Program Sequence|Schedule of Studies|Major Requirements|Minor Requirements|Areas? of Emphasis|Co-op)/i.test(line)
   )
 }
 
 function parseProgram(slug, lines) {
-  const warnings = []
   const degIdx = lines.findIndex((l) => /degree:\s*/i.test(l))
   // The degree name can wrap to the next line, so join one extra line first.
   const degreeText =
@@ -118,145 +171,180 @@ function parseProgram(slug, lines) {
         .trim()
     : ''
 
-  const coreNamed = new Set()
+  const majorCore = new Set() // named courses from a "Major Requirements" table
+  const schedCore = new Set() // named courses from a sample/required schedule
   const workTerms = new Set()
-  const schedule = [] // { sem, code }
-  const electiveRules = []
-
+  let majorRuleBased = false // major reqs expressed as rules (schedule is sample)
+  const schedule = [] // { sem, code } fixed (non-choice) rows only
+  const namedSelects = [] // { credits, label, options:Set }
+  const rules = []
   const aoes = [] // { name, named:Set, selectFrom:[{credits,label,options:[]}] }
+  const totals = []
   let summaryAoe = 0
-  let summaryTotal = 0
+  let majorFloor = 0
+  let hasCoopSection = false
 
   let section = 'pre'
   let currentSem = 0
+  let curSelect = null // active choose-list (schedule or major section)
+  let inNamedTable = false
+  let menuMode = false // inside a reference list of acceptable electives
   let currentAoe = null
-  let currentSelect = null
+  let aoeSelect = null
   const recent = []
+  const titleBefore = () => [...recent].reverse().find(isTitleLike)
 
   for (const line of lines) {
-    // Section transitions.
-    if (SEM_RE.test(line) || /Recommended Program Sequence|Schedule of Studies/i.test(line)) {
-      section = 'schedule'
-      const sm = line.match(SEM_RE)
-      if (sm) currentSem = parseInt(sm[1], 10)
+    // Section transitions (most specific first). The Minor section is ignored.
+    if (/^Minor Requirements/i.test(line)) {
+      section = 'minor'
+      curSelect = null
+      inNamedTable = false
+      menuMode = false
+    } else if (/^Co-op Requirements|Academic and Co-op Work Term Schedule/i.test(line)) {
+      section = 'coop'
+      hasCoopSection = true
+      curSelect = null
+      inNamedTable = false
+      menuMode = false
     } else if (/^Areas? of Emphasis/i.test(line)) {
       section = 'aoe'
       currentAoe = null
-      currentSelect = null
+      aoeSelect = null
+      menuMode = false
     } else if (/^Credit Summary/i.test(line)) {
       section = 'summary'
-    } else if (/^(Co-op Requirements|Academic and Co-op Work Term Schedule|Minors|Certificates)/i.test(line)) {
-      if (section !== 'schedule') section = 'other'
+      menuMode = false
+    } else if (SEM_RE.test(line) || /Recommended Program Sequence|Schedule of Studies/i.test(line)) {
+      if (section !== 'minor') {
+        section = 'schedule'
+        const sm = line.match(SEM_RE)
+        if (sm) currentSem = parseInt(sm[1], 10)
+        curSelect = null
+        menuMode = false
+      }
+    } else if (/^(Major Requirements|Honours (Major|Requirements)|General (Major|Requirements)|Major \()/i.test(line)) {
+      if (section !== 'minor') {
+        section = 'major'
+        curSelect = null
+        inNamedTable = false
+        menuMode = false
+      }
+    }
+
+    if (section === 'minor') {
+      recent.push(line)
+      if (recent.length > 8) recent.shift()
+      continue
     }
 
     const row = line.match(COURSE_ROW)
+    if (row && row[1].startsWith('COOP*')) workTerms.add(row[1])
 
-    if (section === 'schedule') {
-      if (row) {
-        const code = row[1]
-        if (code.startsWith('COOP*')) workTerms.add(code)
-        else coreNamed.add(code)
-        schedule.push({ sem: currentSem, code })
-      } else {
-        const rule = parseElectiveRule(line)
-        if (rule) electiveRules.push(rule)
-      }
-    } else if (section === 'aoe') {
-      const selM = line.match(/^Select\s+(\d+\.\d{2})\s+credits?\s+from/i)
-      if (selM) {
-        currentSelect = {
-          credits: parseFloat(selM[1]),
-          label: `Select ${selM[1]} credits`,
-          options: [],
-        }
-        if (currentAoe) currentAoe.selectFrom.push(currentSelect)
+    if (section === 'schedule' || section === 'major' || section === 'coop') {
+      if (isMenuHeading(line)) menuMode = true
+      const selC = selectHeader(line)
+      if (selC != null) {
+        const label = titleBefore() || `Select ${selC.toFixed(2)} credits`
+        curSelect = { credits: selC, label, options: new Set() }
+        namedSelects.push(curSelect)
+        inNamedTable = false
+        menuMode = false
+      } else if (/^Code Title Credits/i.test(line)) {
+        inNamedTable = true
+        curSelect = null
       } else if (row) {
         const code = row[1]
-        if (currentSelect) currentSelect.options.push(code)
+        if (!code.startsWith('COOP*')) {
+          if (curSelect) curSelect.options.add(code)
+          // Reference menus list acceptable electives, not required core.
+          else if (!menuMode) {
+            if (section === 'major') {
+              majorCore.add(code)
+            } else {
+              schedCore.add(code)
+              schedule.push({ sem: currentSem, code })
+            }
+          }
+        }
+      } else {
+        const rule = parseRuleLine(line)
+        if (rule) {
+          rules.push(rule)
+          curSelect = null
+          if (section === 'major') majorRuleBased = true
+        }
+        const fl = line.match(/A minimum of\s+(\d+\.\d{2})\s+\S+\s+credits/i)
+        if (fl) {
+          majorFloor = Math.max(majorFloor, parseFloat(fl[1]))
+          if (section === 'major') majorRuleBased = true
+        }
+      }
+    } else if (section === 'aoe') {
+      const selC = selectHeader(line)
+      if (selC != null) {
+        aoeSelect = { credits: selC, label: `Select ${selC.toFixed(2)} credits`, options: [] }
+        if (currentAoe) currentAoe.selectFrom.push(aoeSelect)
+      } else if (row) {
+        const code = row[1]
+        if (aoeSelect) aoeSelect.options.push(code)
         else if (currentAoe) currentAoe.named.add(code)
       } else if (/^Code Title Credits/i.test(line)) {
-        // The AoE name is the most recent title-like line before this marker.
-        const name = [...recent].reverse().find(isTitleLike)
+        const name = titleBefore()
         if (name) {
           currentAoe = { name, named: new Set(), selectFrom: [] }
-          currentSelect = null
+          aoeSelect = null
           aoes.push(currentAoe)
         }
       }
     } else if (section === 'summary') {
       const aoeM = line.match(/Area of Emphasis\s+(\d+\.\d{2})/i)
       if (aoeM) summaryAoe = parseFloat(aoeM[1])
-      const totM = line.match(/Total Credits\s+(\d+(?:\.\d+)?)/i) ||
-        line.match(/\((\d+(?:\.\d+)?)\s+Total Credits\)/i)
-      if (totM) summaryTotal = Math.max(summaryTotal, parseFloat(totM[1]))
+      for (const tm of line.matchAll(/Total Credits\s+(\d+(?:\.\d+)?)/gi)) {
+        totals.push(parseFloat(tm[1]))
+      }
+      const pm = line.match(/\((\d+(?:\.\d+)?)\s+Total Credits\)/i)
+      if (pm) totals.push(parseFloat(pm[1]))
     }
 
     recent.push(line)
     if (recent.length > 8) recent.shift()
   }
 
-  // Aggregate elective rules by (subject, level range).
-  const ruleMap = new Map()
-  for (const r of electiveRules) {
-    const key = `${r.subject ?? 'ANY'}|${r.minLevel ?? 0}|${r.maxLevel ?? 0}`
-    const prev = ruleMap.get(key)
-    if (prev) prev.credits = round2(prev.credits + r.credits)
-    else ruleMap.set(key, { ...r })
-  }
-
-  const core = [...coreNamed]
+  // --- Aggregate ---
+  // When the major section is rule-based, the schedule is just a sample path, so
+  // only its rules/floors count; otherwise the schedule courses are the core.
+  const core = majorRuleBased
+    ? [...majorCore]
+    : [...new Set([...majorCore, ...schedCore])]
   const work = [...workTerms]
   const coreCredits = round2(sumCredits(core))
   const workCredits = round2(sumCredits(work))
 
-  const groups = []
-  if (core.length) {
-    groups.push({
-      id: 'core',
-      name: 'Required Core Courses',
-      description: 'Required courses for the major.',
-      priority: 10,
-      requiredCredits: coreCredits,
-      named: core,
-      selectFrom: [],
-    })
+  // Dedupe choose-lists by their option signature (programs repeat co-op blocks).
+  const selectSeen = new Set()
+  const selectGroups = []
+  for (const s of namedSelects) {
+    const opts = [...s.options]
+    if (opts.length === 0) continue
+    const key = opts.slice().sort().join(',')
+    if (selectSeen.has(key)) continue
+    selectSeen.add(key)
+    selectGroups.push({ credits: s.credits, label: s.label, options: opts })
   }
-  if (work.length) {
-    groups.push({
-      id: 'workTerm',
-      name: 'Co-op Work Terms',
-      description: 'Required co-op work terms.',
-      priority: 15,
-      requiredCredits: workCredits,
-      named: work,
-      selectFrom: [],
-    })
-  }
+  const selectCredits = round2(selectGroups.reduce((t, s) => t + s.credits, 0))
 
-  let electiveCredits = 0
-  let ri = 0
-  for (const r of ruleMap.values()) {
-    electiveCredits = round2(electiveCredits + r.credits)
-    const subjLabel = r.subject ? `${r.subject} ` : ''
-    const lvlLabel = r.maxLevel
-      ? `${r.minLevel} level`
-      : `${r.minLevel}+ level`
-    groups.push({
-      id: `elective-${ri++}`,
-      name: `${subjLabel}Electives (${lvlLabel})`.trim(),
-      description: 'Restricted electives by subject/level.',
-      // 4000-level (capped) is more specific than 3000+.
-      priority: r.maxLevel ? 28 : 30,
-      requiredCredits: r.credits,
-      named: [],
-      selectFrom: [],
-      match: {
-        subjects: r.subject ? [r.subject] : undefined,
-        minLevel: r.minLevel,
-        maxLevel: r.maxLevel,
-      },
-    })
+  // Aggregate rules by (subject, level range); take the larger of duplicates so
+  // a repeated co-op block doesn't double a requirement.
+  const ruleMap = new Map()
+  for (const r of rules) {
+    const key = `${r.subject ?? 'ANY'}|${r.minLevel ?? 0}|${r.maxLevel ?? 0}`
+    const prev = ruleMap.get(key)
+    if (prev) prev.credits = Math.max(prev.credits, r.credits)
+    else ruleMap.set(key, { ...r })
   }
+  const ruleList = [...ruleMap.values()]
+  const ruleCredits = round2(ruleList.reduce((t, r) => t + r.credits, 0))
 
   const areasOfEmphasis = aoes
     .filter((a) => a.named.size > 0 || a.selectFrom.length > 0)
@@ -269,34 +357,106 @@ function parseProgram(slug, lines) {
     }))
   const aoeCredits = areasOfEmphasis.length ? summaryAoe || 4.0 : 0
 
-  const total = summaryTotal || round2(coreCredits + workCredits + electiveCredits + aoeCredits)
-  const freeCredits = round2(
-    Math.max(0, total - coreCredits - workCredits - electiveCredits - aoeCredits),
-  )
-  if (freeCredits > 0) {
-    groups.push({
-      id: 'free',
-      name: 'Free Electives',
-      description: 'Any university courses.',
-      priority: 40,
-      requiredCredits: freeCredits,
-      named: [],
-      selectFrom: [],
-      match: { anyCourse: true },
+  const known = round2(coreCredits + selectCredits + ruleCredits + aoeCredits)
+  const uniqTotals = [...new Set(totals)].sort((a, b) => a - b)
+  let regularTotal =
+    uniqTotals[0] ?? (/(Bachelor|Honours)/i.test(degree) ? 20.0 : known)
+  if (regularTotal < known) regularTotal = known
+
+  const emitCoop = work.length > 0
+  let coopTotal =
+    uniqTotals.length > 1
+      ? uniqTotals[uniqTotals.length - 1]
+      : round2(regularTotal + (workCredits || 2.0))
+  const coopKnown = round2(known + workCredits)
+  if (coopTotal < coopKnown) coopTotal = coopKnown
+
+  function buildGroups(includeWork) {
+    const g = []
+    if (core.length) {
+      g.push({
+        id: 'core',
+        name: 'Required Core Courses',
+        description: 'Required courses for the major.',
+        priority: 10,
+        requiredCredits: coreCredits,
+        named: core,
+        selectFrom: [],
+      })
+    }
+    if (includeWork && work.length) {
+      g.push({
+        id: 'workTerm',
+        name: 'Co-op Work Terms',
+        description: 'Required co-op work terms.',
+        priority: 15,
+        requiredCredits: workCredits,
+        named: work,
+        selectFrom: [],
+      })
+    }
+    selectGroups.forEach((s, i) =>
+      g.push({
+        id: `select-${i}`,
+        name: s.label,
+        description: 'Choose courses from this list.',
+        priority: 22,
+        requiredCredits: s.credits,
+        named: [],
+        selectFrom: [s],
+      }),
+    )
+    ruleList.forEach((r, i) => {
+      const subjLabel = r.subject ? `${r.subject} ` : ''
+      const lvlLabel = r.minLevel
+        ? r.maxLevel
+          ? ` (${r.minLevel} level)`
+          : ` (${r.minLevel}+ level)`
+        : ''
+      g.push({
+        id: `rule-${i}`,
+        name: `${subjLabel}Electives${lvlLabel}`.trim(),
+        description: 'Restricted electives by subject/level.',
+        priority: r.maxLevel ? 28 : 30,
+        requiredCredits: r.credits,
+        named: [],
+        selectFrom: [],
+        match: {
+          subjects: r.subject ? [r.subject] : undefined,
+          minLevel: r.minLevel,
+          maxLevel: r.maxLevel,
+        },
+      })
     })
+    const total = includeWork ? coopTotal : regularTotal
+    const knownAll = round2(known + (includeWork ? workCredits : 0))
+    const free = round2(Math.max(0, total - knownAll))
+    if (free > 0) {
+      g.push({
+        id: 'free',
+        name: 'Free Electives',
+        description: 'Any university courses.',
+        priority: 40,
+        requiredCredits: free,
+        named: [],
+        selectFrom: [],
+        match: { anyCourse: true },
+      })
+    }
+    return g
   }
 
   // Recommended sequence + default terms from the detected semesters.
   const semNums = [...new Set(schedule.map((s) => s.sem).filter((n) => n > 0))].sort(
     (a, b) => a - b,
   )
-  const defaultTerms = (semNums.length ? semNums : [1, 2, 3, 4, 5, 6, 7, 8]).map(
-    (n) => ({
-      id: `s${n}`,
-      label: `Semester ${n}`,
-      season: n % 2 === 1 ? 'Fall' : 'Winter',
-    }),
-  )
+  const regularTerms = semNums.length
+    ? semNums.map((n) => ({
+        id: `s${n}`,
+        label: `Semester ${n}`,
+        season: n % 2 === 1 ? 'Fall' : 'Winter',
+      }))
+    : semScaffold(8)
   const seqMap = new Map()
   for (const { sem, code } of schedule) {
     if (sem <= 0) continue
@@ -307,23 +467,56 @@ function parseProgram(slug, lines) {
     .sort((a, b) => a[0] - b[0])
     .map(([sem, codes]) => ({ termId: `s${sem}`, codes }))
 
-  if (!core.length) warnings.push('No core courses detected from the schedule.')
-  if (!summaryTotal) warnings.push('No Credit Summary total found; total is estimated.')
+  const hasRequirements =
+    core.length > 0 || selectGroups.length > 0 || ruleList.length > 0
+  const warnings = []
+  if (!hasRequirements && areasOfEmphasis.length === 0) {
+    warnings.push('No requirements detected for this program.')
+  }
+  if (majorFloor && !uniqTotals.length) {
+    warnings.push(`Total estimated; major floor is ${majorFloor} credits.`)
+  }
 
-  return {
+  const source = `${CALENDAR}/programs-majors-minors/${slug}/${slug}.pdf`
+  const generatedAt = new Date().toISOString()
+  const name = slugToName(slug)
+  const baseWarn = warnings.length ? warnings : undefined
+
+  const regular = {
     id: slug,
-    name: slugToName(slug),
+    name,
     degree,
-    totalCredits: total,
-    groups,
+    totalCredits: regularTotal,
+    groups: buildGroups(false),
     areasOfEmphasis,
     aoeCredits,
     recommendedSequence,
-    defaultTerms,
-    source: `${CALENDAR}/programs-majors-minors/${slug}/${slug}.pdf`,
-    generatedAt: new Date().toISOString(),
-    parseWarnings: warnings.length ? warnings : undefined,
+    defaultTerms: regularTerms,
+    source,
+    generatedAt,
+    parseWarnings: baseWarn,
+    empty: !hasRequirements && areasOfEmphasis.length === 0,
   }
+
+  const out = [regular]
+  if (emitCoop) {
+    out.push({
+      id: `${slug}-coop`,
+      name: `${name} (Co-op)`,
+      degree,
+      totalCredits: coopTotal,
+      groups: buildGroups(true),
+      areasOfEmphasis,
+      aoeCredits,
+      recommendedSequence: [],
+      defaultTerms: COOP_SCAFFOLD.map((t) => ({ ...t })),
+      source,
+      generatedAt,
+      parseWarnings: baseWarn,
+      empty: !hasRequirements && areasOfEmphasis.length === 0,
+    })
+  }
+  return out
 }
 
 // ----------------------------------------------------------------------------
@@ -425,7 +618,7 @@ function curatedCS() {
   const core = csCore()
   const coreGroup = {
     id: 'core',
-    name: 'Computer Science Major',
+    name: 'Required Core Courses',
     description: 'Required core courses for the B.Comp CS major.',
     priority: 10,
     requiredCredits: round2(sumCredits(core)),
@@ -540,6 +733,10 @@ function curatedCS() {
 
 async function main() {
   await mkdir(PROGRAMS_DIR, { recursive: true })
+  // Clear stale program files so dropped/renamed programs don't linger.
+  for (const f of await readdir(PROGRAMS_DIR)) {
+    if (f.endsWith('.json')) await rm(join(PROGRAMS_DIR, f))
+  }
 
   try {
     COURSES = JSON.parse(await readFile(join(PUBLIC_DIR, 'courses.json'), 'utf8'))
@@ -561,23 +758,30 @@ async function main() {
         programs.push(...curatedCS())
       } else {
         const lines = await pdfToLines(data)
-        programs.push(parseProgram(slug, lines))
+        programs.push(...parseProgram(slug, lines))
       }
     } catch (err) {
       console.warn(`  ! failed to parse ${slug}: ${err.message}`)
     }
   }
 
-  // Write one file per program + a small index.
+  // Write one file per program (skipping programs with no parseable
+  // requirements) + a small index for the picker.
   const index = []
+  let dropped = 0
   for (const p of programs) {
-    await writeFile(join(PROGRAMS_DIR, `${p.id}.json`), JSON.stringify(p))
-    index.push({ id: p.id, name: p.name, degree: p.degree })
+    const { empty, ...prog } = p
+    if (empty) {
+      dropped++
+      continue
+    }
+    await writeFile(join(PROGRAMS_DIR, `${prog.id}.json`), JSON.stringify(prog))
+    index.push({ id: prog.id, name: prog.name, degree: prog.degree })
   }
   index.sort((a, b) => a.name.localeCompare(b.name))
   await writeFile(join(PUBLIC_DIR, 'programs-index.json'), JSON.stringify(index))
 
-  console.log(`\nDone. ${programs.length} programs -> public/programs/*.json`)
+  console.log(`\nDone. ${index.length} programs -> public/programs/*.json (dropped ${dropped} empty)`)
   console.log(`Index (${index.length}) -> public/programs-index.json`)
 }
 

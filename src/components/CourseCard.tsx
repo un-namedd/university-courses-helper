@@ -52,9 +52,9 @@ export function CourseCard({ pc, bucket, warnings, groupMeta, pinOptions }: Prop
           : 'border-line hover:border-accent/50')
       }
     >
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2">
         {pc.custom ? (
-          <span className="truncate font-semibold tracking-wide text-fg">
+          <span className="min-w-0 flex-1 truncate font-semibold tracking-wide text-fg">
             {label}
           </span>
         ) : (
@@ -67,11 +67,11 @@ export function CourseCard({ pc, bucket, warnings, groupMeta, pinOptions }: Prop
           </button>
         )}
 
-        <span className="flex-1" />
+        {!pc.custom && <span className="min-w-0 flex-1" />}
 
         <span
-          className={'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ' + meta.chip}
-          title="Counts toward this requirement"
+          className={'min-w-0 max-w-[45%] shrink truncate rounded-md px-1.5 py-0.5 text-[10px] font-semibold ' + meta.chip}
+          title={meta.label}
         >
           {meta.label}
         </span>
